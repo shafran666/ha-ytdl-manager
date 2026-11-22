@@ -1,3 +1,5 @@
+![YTDL Manager banner](screenshots/banner.png)
+
 # YTDL Manager
 
 A self-hosted yt-dlp download manager for **Home Assistant OS**, designed for concert and long-form video collections.
@@ -5,6 +7,8 @@ A self-hosted yt-dlp download manager for **Home Assistant OS**, designed for co
 > **Community project. Not affiliated with or endorsed by Home Assistant or YouTube.**
 >
 > **Status:** experimental, AMD64-only. Test with short videos before relying on scheduling, retries, chapter embedding or large downloads.
+
+[![Add YTDL Manager to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fshafran666%2Fha-ytdl-manager)
 
 ![YTDL Manager dashboard](screenshots/YTDL_Manager.png)
 

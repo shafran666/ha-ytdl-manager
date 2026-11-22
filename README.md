@@ -1,5 +1,7 @@
 ![YTDL Manager banner](screenshots/banner.png)
 
+<img src="ytdl_manager/icon.png" alt="YTDL Manager app icon" width="120" />
+
 # YTDL Manager
 
 A self-hosted yt-dlp download manager for **Home Assistant OS**, designed for concert and long-form video collections.

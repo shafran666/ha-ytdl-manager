@@ -1,7 +1,7 @@
 name: "YTDL Manager"
 version: "1.0.0"
 slug: "ytdl_manager"
-description: "Concert video downloader with queue, chapters and scheduler"
+description: "Video download manager with quality selection, chapters, subtitles and scheduling"
 arch:
   - amd64
 startup: application

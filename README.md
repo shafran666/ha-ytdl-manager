@@ -75,3 +75,11 @@ Maintained by **[@shafran666](https://github.com/shafran666)**. Built on [yt-dlp
 ## License
 
 The original YTDL Manager project code is released under the MIT License. Third-party components retain their own licenses.
+
+## ☕ Support the Project
+
+YTDL Manager is free and open-source software.
+
+If you enjoy using it and would like to support future development, you can buy me a coffee. Every contribution is appreciated!
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-5F7FFF?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/shafran666)

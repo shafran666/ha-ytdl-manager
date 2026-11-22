@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+*.log
+*.part
+*.tmp
+cookies.txt
+*.key
+*.pem
+/data/

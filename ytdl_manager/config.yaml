@@ -1,0 +1,20 @@
+name: "YTDL Manager"
+version: "1.0.0"
+slug: "ytdl_manager"
+description: "Concert video downloader with queue, chapters and scheduler"
+arch:
+  - amd64
+startup: application
+boot: auto
+init: true
+ingress: true
+ingress_port: 8765
+panel_icon: mdi:download-circle
+panel_title: YTDL Manager
+map:
+  - type: media
+    read_only: false
+options:
+  download_directory: "/media/downloads"
+schema:
+  download_directory: str

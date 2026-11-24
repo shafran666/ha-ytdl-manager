@@ -94,3 +94,12 @@ If you enjoy using it and would like to support future development, you can buy 
 ## Version 1.0.1
 
 This update adds Home Assistant timezone scheduling, broader single-video yt-dlp support, improved chapter comments and bracket handling, and a subtitle-error fallback. See [Changelog](ytdl_manager/CHANGELOG.md).
+
+## Roadmap
+
+See [GitHub Issues](https://github.com/shafran666/ha-ytdl-manager/issues) and [Milestones](https://github.com/shafran666/ha-ytdl-manager/milestones) for planned improvements, testing and future releases.
+
+- **v1.0.2:** Reliability and regression testing
+- **v1.1.0:** Video search
+- **v1.2.0:** Media management
+

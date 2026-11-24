@@ -23,7 +23,7 @@ A self-hosted yt-dlp download manager for **Home Assistant OS**, designed for co
 - Chapters from video metadata or description; optional comment setlist search, editable timestamps and names, embedded into MKV.
 - Custom folder/file name and media directory browser.
 - Download Manager showing 20 recent tasks, queue, cancellation and resume.
-- Scheduled downloads in Europe/Warsaw and sequential processing.
+- Scheduled downloads in Home Assistant timezone and sequential processing.
 - Automatic retry attempts after five minutes, up to three times.
 - Light/dark UI controls.
 
@@ -89,3 +89,8 @@ YTDL Manager is free and open-source software.
 If you enjoy using it and would like to support future development, you can buy me a coffee. Every contribution is appreciated!
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-5F7FFF?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/shafran666)
+
+
+## Version 1.0.1
+
+This update adds Home Assistant timezone scheduling, broader single-video yt-dlp support, improved chapter comments and bracket handling, and a subtitle-error fallback. See [Changelog](ytdl_manager/CHANGELOG.md).

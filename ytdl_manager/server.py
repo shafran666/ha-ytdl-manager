@@ -6,10 +6,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote
 import yt_dlp
 
-VERSION='1.0.0'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
+VERSION='1.0.1'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
 OPTIONS=json.loads((ROOT/'options.json').read_text()) if (ROOT/'options.json').exists() else {}
 DEFAULT=Path(OPTIONS.get('download_directory','/media/downloads'))
-DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo('Europe/Warsaw')
+DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo(os.environ.get('TZ','UTC'))
 LOCK=threading.RLock(); JOBS=[]; ACTIVE={}; METADATA={}; FORMAT_DETAILS={}; SEARCH={}; MAX_JOBS=200
 RUNNING={'queued','downloading','processing','cancelling'}
 QUEUE_STATES={'queued','scheduled','retry_wait'}
@@ -25,10 +25,29 @@ try:
     save()
 except Exception as exc: print('History load error:',exc,flush=True); JOBS=[]
 def valid_url(url):
+    # Supported yt-dlp single-video sites, excluding generic URLs and private hosts.
+    from urllib.parse import urlsplit
+    import ipaddress
     try:
+        if not isinstance(url,str) or len(url)>2048: return False
         p=urlsplit(url)
-        return p.scheme=='https' and p.hostname in ('youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','youtu.be') and len(url)<2048
-    except ValueError: return False
+        if p.scheme!='https' or not p.hostname or p.username or p.password: return False
+        host=p.hostname.lower().rstrip('.')
+        if host=='localhost' or host.endswith(('.local','.localhost','.internal')): return False
+        try: return ipaddress.ip_address(host).is_global
+        except ValueError: pass
+        if '.' not in host: return False
+        from yt_dlp.extractor import gen_extractor_classes
+        return any(cls.IE_NAME!='generic' and cls.suitable(url) for cls in gen_extractor_classes())
+    except (TypeError,ValueError): return False
+
+def close_brackets(text):
+    stack=[]; pairs={'(':')','[':']','{':'}'}
+    for ch in text:
+        if ch in pairs: stack.append(pairs[ch])
+        elif stack and ch==stack[-1]: stack.pop()
+    return text+''.join(reversed(stack))
+
 def clean_name(s):
     s=re.sub(r'[<>:"/\\|?*\x00-\x1f]',' ',str(s)); s=re.sub(r'\s+',' ',s).strip(' .')
     if not s or s in ('.','..'): raise ValueError('Invalid Save as name')
@@ -45,7 +64,7 @@ def chapter_rows(text,duration):
         if not m: continue
         h,minutes,seconds,title=m.groups(); sec=int(h or 0)*3600+int(minutes)*60+int(seconds)
         title=title.strip(' -–—:.)|\t')
-        if title and (not duration or sec<duration) and (not result or sec>result[-1]['start']): result.append({'start':sec,'title':title})
+        if title and (not duration or sec<duration) and (not result or sec>result[-1]['start']): result.append({'start':sec,'title':close_brackets(title)})
     return result if len(result)>=3 else []
 def extract(url,comments=False,limit=0):
     opts={'quiet':True,'no_warnings':True,'skip_download':True,'noplaylist':True}
@@ -69,7 +88,7 @@ def analyze_info(info):
             videos.add(h); c=codec_name(v); codecs.add(c); combos.setdefault(c,set()).add(h)
         if a!='none' and isinstance(abr,(float,int)) and abr>0: audios.add(round(abr))
     duration=info.get('duration')
-    video=[{'start':int(c.get('start_time') or 0),'title':str(c.get('title') or 'Chapter')} for c in info.get('chapters') or [] if c.get('start_time') is not None]
+    video=[{'start':int(c.get('start_time') or 0),'title':close_brackets(str(c.get('title') or 'Chapter'))} for c in info.get('chapters') or [] if c.get('start_time') is not None]
     description=chapter_rows(info.get('description'),duration)
     # yt-dlp may infer chapters from description. Mark matching sets as description, not video.
     same=bool(video and description and len(video)==len(description) and all(abs(a['start']-b['start'])<=2 for a,b in zip(video,description)))
@@ -85,7 +104,7 @@ def check_chapters(items,duration):
     for row in items:
         start=int(row['start']); title=str(row['title']).strip()[:120]
         if start<0 or not title or (duration and start>=duration) or (out and start<=out[-1]['start']): raise ValueError('Chapters must be chronological and within video duration')
-        out.append({'start':start,'title':title})
+        out.append({'start':start,'title':close_brackets(title)})
     return out
 def video_format(job):
     info=extract(job['url'])
@@ -192,9 +211,29 @@ def estimate_job_size(job,info):
         values.append(float(size))
     return round(sum(values)/1000000,1) if values else None
 
+def is_subtitle_error(message):
+    text=str(message).lower()
+    return ('subtitle' in text or 'caption' in text) and any(x in text for x in (
+        'unable to download', 'error downloading', 'failed to download'))
+
+def without_subtitles(command):
+    # Only remove flags added for subtitle downloading/embedding.
+    result=[]; i=0
+    while i<len(command):
+        if command[i] in ('--write-subs','--write-auto-subs','--embed-subs'):
+            i+=1; continue
+        if command[i]=='--sub-langs':
+            i+=2; continue
+        result.append(command[i]); i+=1
+    return result
+
 def worker(job):
     try:
         folder=allowed_dir(job['directory'])
+        import shutil
+        if shutil.disk_usage(folder).free < 150*1000000:
+            raise RuntimeError('Insufficient disk space')
+
         with LOCK:
             if job['state']=='cancelled': return
             job.update(state='downloading',message='Starting download',updated=now()); save()
@@ -250,6 +289,27 @@ def worker(job):
         rc=proc.wait()
         with LOCK: cancelled=job['state']=='cancelling'
         if cancelled: raise RuntimeError('Cancelled by user')
+        if rc and not cancelled and job.get('subtitle')!='None' and is_subtitle_error(err):
+            # One fallback attempt without subtitles. Preserve video/audio .part files.
+            with LOCK:
+                job['subtitle_failed']=True
+                job['subtitle_error']=err[:240]
+                job['message']='Subtitles unavailable; continuing without subtitles'
+                save()
+            retry_cmd=without_subtitles(cmd)
+            retry_proc=subprocess.Popen(retry_cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                        text=True,bufsize=1,start_new_session=True)
+            with LOCK: ACTIVE[job['id']]=retry_proc
+            retry_error=''
+            for retry_line in retry_proc.stdout:
+                retry_line=retry_line.strip()
+                if retry_line.startswith('filepath:'): final=retry_line[9:]
+                if retry_line.startswith('ERROR:'): retry_error=retry_line[:250]
+                if retry_line: print(retry_line[:400],flush=True)
+            rc=retry_proc.wait()
+            with LOCK: cancelled=job.get('state')=='cancelling'
+            if cancelled: raise RuntimeError('Cancelled by user')
+            if rc: err=retry_error or 'Video/audio retry failed after subtitle error'
         if rc: raise RuntimeError(err or f'yt-dlp exited with {rc}')
         chapter_embedded=False
         if job['chapters'] and final and Path(final).is_file():
@@ -265,7 +325,7 @@ def worker(job):
                 job['downloaded_mb']=final_mb
                 job['total_mb']=final_mb
                 job['message']='Completed'
-            job.update(state='completed',progress=100,message='Completed' if not job['chapters'] or chapter_embedded else 'Completed; chapters could not be embedded',finished=now(),updated=now(),subtitles_embedded=subtitles_seen,chapters_embedded=chapter_embedded,next_retry=None); save()
+            job.update(state='completed',progress=100,message='Completed' if not job['chapters'] or chapter_embedded else 'Completed; chapters could not be embedded',finished=now(),updated=now(),subtitles_embedded=(subtitles_seen and not job.get('subtitle_failed')),chapters_embedded=chapter_embedded,next_retry=None); save()
     except Exception as exc:
         with LOCK:
             cancelled=job.get('state')=='cancelling' or str(exc)=='Cancelled by user'
@@ -300,7 +360,7 @@ def queue_job(data,scheduled=False):
             local=datetime.now(TZ); target=local.replace(hour=int(m[1]),minute=int(m[2]),second=0,microsecond=0)
             if target<=local: target+=timedelta(days=1)
             schedule=target.astimezone(timezone.utc).isoformat()
-        job={'id':str(uuid.uuid4()),'url':url,'title':info['title'],'thumbnail':info.get('thumbnail') or '', 'save_as':name,'directory':directory,'duration':info['duration'],'video':video,'audio':audio,'codec':codec,'subtitle':sub,'chapters':chapters,'chapter_source':str(data.get('chapter_source','')) if chapters else '', 'state':'scheduled' if scheduled else 'queued','scheduled_for':schedule,'progress':0,'speed':'','eta':'','message':'Scheduled' if scheduled else 'Queued','started':now(),'updated':now(),'finished':None,'retries':0,'next_retry':None,'subtitles_embedded':False,'chapters_embedded':False}
+        job={'id':str(uuid.uuid4()),'url':url,'title':info['title'],'thumbnail':info.get('thumbnail') or '', 'save_as':name,'directory':directory,'duration':info['duration'],'video':video,'audio':audio,'codec':codec,'subtitle':sub,'chapters':chapters,'chapter_source':str(data.get('chapter_source','')) if chapters else '', 'state':'scheduled' if scheduled else 'queued','scheduled_for':schedule,'progress':0,'speed':'','eta':'','message':'Scheduled' if scheduled else 'Queued','started':now(),'updated':now(),'finished':None,'retries':0,'next_retry':None,'subtitles_embedded':False,'subtitle_failed':False,'subtitle_error':'','chapters_embedded':False}
         job['queue_rank']=max((int(x.get('queue_rank',i)) for i,x in enumerate(JOBS)),default=-1)+1
         JOBS.append(job); save()
         PREF.write_text(json.dumps({'directory':directory}))
@@ -343,6 +403,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path=='/jobs':
             with LOCK: rows=sorted(JOBS,key=lambda j:(0 if j['state'] in ('downloading','processing','cancelling') else 1 if j['state'] in QUEUE_STATES else 2, int(j.get('queue_rank',JOBS.index(j))) if j['state'] in QUEUE_STATES else -datetime.fromisoformat(j['started']).timestamp()))[:20]
             self.reply(200,rows)
+        elif path=='/timezone': self.reply(200,{'timezone':str(TZ)})
         elif path=='/preferences':
             try: prefs=json.loads(PREF.read_text())
             except Exception: prefs={'directory':str(DEFAULT)}
@@ -355,7 +416,13 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/analyze':
                 url=str(data.get('url','')).strip()
                 if not valid_url(url): raise ValueError('Invalid URL')
-                raw=extract(url); info=analyze_info(raw); METADATA[url]=info; FORMAT_DETAILS[url]=raw.get('formats') or []; SEARCH[url]={'seen':set(),'limit':0,'candidates':[],'limit_reached':False}
+                raw=extract(url)
+                if raw.get('_type') in ('playlist','multi_video') or raw.get('entries') is not None:
+                    raise ValueError('Playlists and multi-video collections are not supported')
+                formats=raw.get('formats') or []
+                if not any(f.get('vcodec') not in (None,'none') for f in formats): raise ValueError('No video stream available')
+                if not any(f.get('acodec') not in (None,'none') for f in formats): raise ValueError('No audio stream available')
+                info=analyze_info(raw); METADATA[url]=info; FORMAT_DETAILS[url]=raw.get('formats') or []; SEARCH[url]={'seen':set(),'limit':0,'candidates':[],'limit_reached':False}
                 self.reply(200,info)
             elif path=='/estimate':
                 url=str(data.get('url','')).strip()
@@ -387,8 +454,8 @@ class Handler(BaseHTTPRequestHandler):
                 url=data.get('url')
                 if url not in METADATA: raise ValueError('Analyze first')
                 cache=SEARCH.setdefault(url,{'seen':set(),'limit':0,'candidates':[],'limit_reached':False})
-                if cache['limit_reached']: self.reply(200,{'candidates':cache['candidates'],'limit_reached':True}); return
-                limit=min(cache['limit']+100,1000)
+                if cache['limit_reached']: self.reply(200,{'candidates':cache['candidates'],'limit_reached':True,'checked':cache['limit']}); return
+                limit=min(cache['limit']+100,10000)
                 info=extract(url,True,limit)
                 for c in info.get('comments') or []:
                     cid=str(c.get('id') or '')
@@ -396,8 +463,8 @@ class Handler(BaseHTTPRequestHandler):
                     cache['seen'].add(cid)
                     chapters=chapter_rows(c.get('text'),METADATA[url]['duration'])
                     if chapters: cache['candidates'].append({'id':'comment-'+cid,'label':f'Comment {len(cache["candidates"])+1} ({len(chapters)})','source':'comments','chapters':chapters,'author':c.get('author') or 'unknown','date':c.get('timestamp')})
-                cache['limit']=limit; cache['limit_reached']=limit>=1000
-                self.reply(200,{'candidates':cache['candidates'],'limit_reached':cache['limit_reached']})
+                cache['limit']=limit; cache['limit_reached']=limit>=10000 or len(info.get('comments') or [])<limit
+                self.reply(200,{'candidates':cache['candidates'],'limit_reached':cache['limit_reached'],'checked':cache['limit']})
             elif path=='/folders':
                 folder=allowed_dir(data.get('path','/media'))
                 children=[]

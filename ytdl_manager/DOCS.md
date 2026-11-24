@@ -1,36 +1,19 @@
 # YTDL Manager documentation
 
 ## Installation
+Add `https://github.com/shafran666/ha-ytdl-manager` in **Settings > Apps > Install app > Repositories**. Install YTDL Manager, configure a writable directory under `/media`, then start the app and open its Web UI.
 
-1. In Home Assistant, open **Settings > Apps > Install app > Repositories**.
-2. Add `https://github.com/shafran666/ha-ytdl-manager`.
-3. Install **YTDL Manager** and configure an existing writable directory under `/media`.
-4. Start the app and select **Open Web UI**.
-
-## Downloading
-
-Paste a supported YouTube URL and wait for metadata analysis. Choose the available video quality, audio bitrate and codec. The app may show an estimated file size. The highest available video and audio qualities are selected by default.
-
-## Subtitles
-
-English is preferred when available. Select another language or **None**. Subtitle availability and embedding are not guaranteed; source rate limits may interrupt a download.
+## Downloads
+Paste a direct HTTPS URL for a single video with both video and audio streams. Playlists, multi-video collections and audio-only content are not supported. Select video/audio quality and codec, and optionally subtitles. Source support depends on yt-dlp and the remote service.
 
 ## Chapters
-
-The app checks metadata and video descriptions. If neither contains chapters, it may search comments automatically; additional comment searches can be started manually. Selecting a chapter source automatically selects its timestamps and names for the download. You can edit individual rows or choose **Ignore chapters**. Successful post-processing embeds chapters into MKV.
-
-## Download Manager
-
-The manager offers **All**, **Downloading**, **Queued**, **Scheduled**, **Completed** and **Failed** filters. Waiting jobs can be reordered. **Cancel** stops a task, **Resume now** requeues an interrupted task, and **Delete** removes a history/queue entry without deleting the media file. Progress, downloaded MB, speed and ETA are shown when available.
+The app reads chapters from video metadata and descriptions. Comments are searched when neither source contains chapters, or manually using **Search next 100 comments** or **Search all next comments**. Use **Stop search** to stop further batches. The highlighted chapter source is selected automatically; edits to titles and timestamps are used when embedding chapters into MKV. Missing closing brackets in imported titles are automatically completed.
 
 ## Scheduling
+Schedule times use the timezone provided by Home Assistant. The app uses this timezone to interpret and display scheduled times. Downloads run sequentially; queued jobs can be reordered.
 
-Times use the `Europe/Warsaw` time zone. Jobs due at the same time are processed sequentially. Interrupted downloads may be retried after five minutes, up to three attempts.
+## Download Manager
+The manager displays thumbnails, progress, downloaded MB, speed and ETA when available. It supports cancellation, resuming and removing entries from the queue/history without deleting media files. If subtitles cannot be downloaded, the app makes one fallback attempt without subtitles and records the failure.
 
 ## Storage and troubleshooting
-
-Choose an existing writable path under `/media`. The app saves job history and preferences in persistent `/data`. It does not intentionally create chapter JSON files or image sidecars beside downloads. Inspect app Logs for yt-dlp or FFmpeg errors; confirm the media mount is available before retrying.
-
-## Appearance
-
-Use the **Theme** selector to choose Auto, Dark or Light. Auto follows the Home Assistant theme when it can be detected, otherwise it falls back to browser preferences.
+The default directory is `/media/downloads`; choose an existing writable folder under `/media`. Check the app logs for yt-dlp and FFmpeg errors. The application does not automatically switch storage when a mount is unavailable. Media sources may impose access or rate limits.

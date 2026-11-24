@@ -1,25 +1,20 @@
 # Changelog
 
+## [1.0.2] - 2026-11-24
+
+### Reliability
+- Improve monitoring of free disk space while downloading, with a critical-space safeguard.
+- Smooth reported transfer speed and ETA across video and audio downloads.
+- Keep aggregate progress from moving backwards between separate streams.
+- Add clearer messages for common source, format, network, storage and processing errors.
+
+### Verification
+- Add a separate read-only diagnostic script for queue, retry, timezone, chapters and subtitle fallback checks.
+- End-to-end tests of restart/resume, multi-site downloads, comments, subtitles and scheduled execution remain open in GitHub Issues until verified.
+
 ## [1.0.1] - 2026-11-24
-
-### Changed
-- Scheduling uses the Home Assistant timezone instead of a fixed timezone.
-- Support additional yt-dlp sites for individual videos containing video and audio streams.
-- Reject playlists, multi-video collections and audio-only sources.
-- Close unmatched brackets in chapter names imported from video metadata, descriptions and comments.
-- Rename comment search control to **Search next 100 comments**.
-- Add **Search all next comments** and **Stop search** controls.
-- Check available disk space before starting a download.
-
-### Fixed
-- When subtitle retrieval fails, retry the video once without subtitles, retaining selected video and audio formats.
-- Show subtitle unavailability in Download Manager.
-
-### Notes
-- Search by video title is not included in this release.
-- Some sites require authentication or may not expose downloadable formats.
-- Retry, comments and subtitle fallback behavior depend on the source service.
+- Use the Home Assistant timezone instead of a fixed timezone.
+- Expand single-video yt-dlp site support, chapter handling, comment controls and subtitle fallback.
 
 ## [1.0.0] - 2026-11-22
-
-Initial public release.
+- Initial public release.

@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote
 import yt_dlp
 
-VERSION='1.0.1'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
+VERSION='1.0.2'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
 OPTIONS=json.loads((ROOT/'options.json').read_text()) if (ROOT/'options.json').exists() else {}
 DEFAULT=Path(OPTIONS.get('download_directory','/media/downloads'))
 DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo(os.environ.get('TZ','UTC'))
@@ -141,22 +141,36 @@ def ffmetadata(job):
         title=c['title'].replace('\\','\\\\').replace('=','\\=').replace(';','\\;').replace('#','\\#').replace('\n',' ')
         lines+=['[CHAPTER]','TIMEBASE=1/1000',f'START={c["start"]*1000}',f'END={end*1000}',f'title={title}']
     p.write_text('\n'.join(lines)+'\n'); return p
+def friendly_download_error(text):
+    msg=str(text or '')
+    low=msg.lower()
+    if 'no space left on device' in low or 'insufficient disk space' in low:
+        return 'Insufficient disk space'
+    if 'http error 429' in low: return 'Rate limit reached (HTTP 429)'
+    if 'http error 403' in low: return 'Access denied by video source (HTTP 403)'
+    if 'requested format is not available' in low or 'no video format' in low:
+        return 'Selected video format unavailable'
+    if 'network is unreachable' in low or 'connection timed out' in low:
+        return 'Network connection interrupted'
+    if 'ffmpeg' in low and ('error' in low or 'failed' in low):
+        return 'Video processing failed'
+    return msg[:240] or 'Download failed; see app logs'
+
 def monitor_partial_files(job,stop):
-    # Track video/audio formats separately. Each may be renamed from .part
-    # to its final stream file before yt-dlp starts the next stream.
     from pathlib import Path
-    import time
+    import shutil,time
     folder=Path(job['directory'])/job['save_as']
     stem=job['save_as']+'.'
     ids=[x for x in str(job.get('format_ids') or '').split('+') if x]
     highwater={fid:0 for fid in ids}
-    previous_bytes=0
-    previous_time=time.monotonic()
+    previous=0
+    last=time.monotonic()
+    smoothed=None
     while not stop.wait(3):
         try:
             if not folder.is_dir(): continue
+            free=shutil.disk_usage(folder).free
             files=list(folder.iterdir())
-            current={fid:0 for fid in ids}
             active=[]
             for fid in ids:
                 prefix=stem+'f'+fid+'.'
@@ -168,30 +182,42 @@ def monitor_partial_files(job,stop):
                     if name.endswith('.part') or ('.part' not in name and not name.endswith('.tmp')):
                         sizes.append(path.stat().st_size)
                         if name.endswith('.part'): active.append(fid)
-                if sizes: current[fid]=max(sizes)
-                highwater[fid]=max(highwater[fid],current[fid])
+                if sizes: highwater[fid]=max(highwater[fid],max(sizes))
             downloaded=sum(highwater.values())
-            if downloaded<=0: continue
             timestamp=time.monotonic()
-            interval=max(0.01,timestamp-previous_time)
-            speed=max(0,downloaded-previous_bytes)/interval
-            previous_time=timestamp
-            previous_bytes=downloaded
+            interval=max(.01,timestamp-last)
+            instantaneous=max(0,downloaded-previous)/interval
+            last=timestamp
+            previous=downloaded
+            if instantaneous>1024:
+                smoothed=instantaneous if smoothed is None else smoothed*.65+instantaneous*.35
             with LOCK:
                 if job.get('state') not in ('downloading','processing'): return
-                previous_mb=float(job.get('downloaded_mb') or 0)
-                job['downloaded_mb']=round(max(previous_mb,downloaded/1000000),1)
-                total=job.get('total_mb')
-                if isinstance(total,(float,int)) and total>0:
-                    fraction=min(99.9,job['downloaded_mb']/total*100)
-                    job['progress']=round(max(float(job.get('progress') or 0),fraction),1)
-                    remaining=max(0,total*1000000-downloaded)
-                    if speed>1024: job['eta']=str(int(remaining/speed))+' s'
-                if speed>1024: job['speed']=f'{speed/1000000:.2f} MB/s'
-                if active:
-                    job['message']='Downloading video' if active[0]==ids[0] else 'Downloading audio'
-                job['updated']=now()
-                save()
+                if free<100*1000000:
+                    job['message']='Insufficient disk space'
+                    job['disk_space_warning']=True
+                    job['updated']=now()
+                    save()
+                    proc=ACTIVE.get(job['id'])
+                    if proc is not None:
+                        try: proc.terminate()
+                        except OSError: pass
+                    return
+                if downloaded:
+                    job['downloaded_mb']=round(max(float(job.get('downloaded_mb') or 0),downloaded/1000000),1)
+                    total=job.get('total_mb')
+                    if isinstance(total,(int,float)) and total>0:
+                        percent=min(99.9,job['downloaded_mb']/total*100)
+                        job['progress']=round(max(float(job.get('progress') or 0),percent),1)
+                        if smoothed and smoothed>1024:
+                            remaining=max(0,total*1000000-downloaded)
+                            job['eta']=str(int(remaining/smoothed))+' s'
+                    if smoothed and smoothed>1024:
+                        job['speed']=f'{smoothed/1000000:.2f} MB/s'
+                    if active:
+                        job['message']='Downloading video' if active[0]==ids[0] else 'Downloading audio'
+                    job['updated']=now()
+                    save()
         except (OSError,ValueError,TypeError) as exc:
             print('Progress monitor:',exc,flush=True)
 

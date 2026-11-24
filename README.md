@@ -103,3 +103,8 @@ See [GitHub Issues](https://github.com/shafran666/ha-ytdl-manager/issues) and [M
 - **v1.1.0:** Video search
 - **v1.2.0:** Media management
 
+
+
+## Version 1.0.2
+
+Reliability update: disk-space monitoring, smoother progress and ETA, and clearer errors. See [Changelog](ytdl_manager/CHANGELOG.md) and [GitHub Issues](https://github.com/shafran666/ha-ytdl-manager/issues).

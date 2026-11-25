@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote
 import yt_dlp
 
-VERSION='1.0.3-dev'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
+VERSION='1.0.3'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
 OPTIONS=json.loads((ROOT/'options.json').read_text()) if (ROOT/'options.json').exists() else {}
 DEFAULT=Path(OPTIONS.get('download_directory','/media/downloads'))
 DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo(os.environ.get('TZ','UTC'))

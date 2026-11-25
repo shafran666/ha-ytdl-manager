@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3-dev] - Unreleased
+- Preserve queued tasks on restart.
+- Save exact final MKV size in bytes, with displayed MB derived from the file.
+- Development only; stable release is unchanged.
+
+
+
 ## [1.0.2] - 2026-11-24
 
 ### Reliability

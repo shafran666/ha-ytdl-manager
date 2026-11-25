@@ -6,12 +6,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote
 import yt_dlp
 
-VERSION='1.0.2'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
+VERSION='1.0.3-dev'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
 OPTIONS=json.loads((ROOT/'options.json').read_text()) if (ROOT/'options.json').exists() else {}
 DEFAULT=Path(OPTIONS.get('download_directory','/media/downloads'))
 DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo(os.environ.get('TZ','UTC'))
 LOCK=threading.RLock(); JOBS=[]; ACTIVE={}; METADATA={}; FORMAT_DETAILS={}; SEARCH={}; MAX_JOBS=200
-RUNNING={'queued','downloading','processing','cancelling'}
+RUNNING={'downloading','processing','cancelling'}
 QUEUE_STATES={'queued','scheduled','retry_wait'}
 def now(): return datetime.now(timezone.utc).isoformat()
 def save():
@@ -347,7 +347,9 @@ def worker(job):
             meta.unlink(missing_ok=True)
         with LOCK:
             if final and Path(final).is_file():
-                final_mb=round(Path(final).stat().st_size/1000000,1)
+                final_bytes=Path(final).stat().st_size
+                final_mb=round(final_bytes/1000000,1)
+                job['final_size_bytes']=final_bytes
                 job['downloaded_mb']=final_mb
                 job['total_mb']=final_mb
                 job['message']='Completed'

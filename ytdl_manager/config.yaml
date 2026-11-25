@@ -1,5 +1,5 @@
 name: "YTDL Manager"
-version: "1.0.2"
+version: "1.0.3-dev"
 slug: "ytdl_manager"
 description: "Concert video downloader with queue, chapters and scheduler"
 arch:

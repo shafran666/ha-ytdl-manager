@@ -31,3 +31,4 @@
 - YouTube search with duration filtering and manual quality checks.
 - Multi-provider architecture, with unsupported providers hidden until validated.
 - Development only: not a stable release.
+- Expanded sorting, rate-limit cooldown and quality-check controls in DEV.

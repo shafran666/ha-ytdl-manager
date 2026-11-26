@@ -25,3 +25,9 @@
 
 ## [1.0.0] - 2026-11-22
 - Initial public release.
+
+## [1.1.0-dev]
+- Initial opt-in video title search UI and API.
+- YouTube search with duration filtering and manual quality checks.
+- Multi-provider architecture, with unsupported providers hidden until validated.
+- Development only: not a stable release.

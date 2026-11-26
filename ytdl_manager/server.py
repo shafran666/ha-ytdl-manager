@@ -544,4 +544,39 @@ class Handler(BaseHTTPRequestHandler):
         except RuntimeError as exc: self.reply(409,{'error':str(exc)})
         except Exception as exc: self.reply(400,{'error':str(exc)[:300]})
 print('YTDL Manager',VERSION,'ready; storage:',DEFAULT.is_dir(),flush=True)
+# YTDL_SEARCH_110_DEV
+import json as _search_json
+import search_engine as _search_engine
+_original_search_post=Handler.do_POST
+_search_last_request={}
+def _search_do_POST(self):
+    from urllib.parse import urlsplit
+    path=urlsplit(self.path).path
+    if path not in ('/search','/search/quality'):
+        return _original_search_post(self)
+    try:
+        length=int(self.headers.get('Content-Length','0'))
+        if not 0<length<=8192:raise ValueError('Invalid request size')
+        data=_search_json.loads(self.rfile.read(length))
+        if not isinstance(data,dict):raise ValueError('Invalid request')
+        if path=='/search':
+            query,providers,minimum,minutes,count,offset=_search_engine.validate_options(data)
+            groups={}
+            for provider in providers:
+                try:
+                    groups[provider]=[x for x in _search_engine.extract_search(query,provider,count,offset) if _search_engine.duration_ok(x.get('duration'),minutes)]
+                except Exception as exc:
+                    groups[provider]=[]
+            items=_search_engine.merge_round_robin(groups)
+            # Metadata quality checks are deliberately opt-in to prevent HTTP 429 storms.
+            payload={'results':items,'next_offset':offset+count,'providers':list(_search_engine.PROVIDERS),'quality_check_limit':10,'min_quality':minimum}
+        else:
+            payload=_search_engine.verify_quality(data.get('url'))
+        raw=_search_json.dumps(payload,ensure_ascii=False).encode('utf-8')
+        self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+    except Exception as exc:
+        raw=_search_json.dumps({'error':str(exc)[:300]}).encode()
+        self.send_response(400);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+Handler.do_POST=_search_do_POST
+
 ThreadingHTTPServer(('0.0.0.0',8765),Handler).serve_forever()

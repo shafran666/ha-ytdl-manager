@@ -8,7 +8,22 @@ from urllib.parse import urlparse
 import time
 
 QUALITIES=(0,720,1080,1440,2160)
-PROVIDERS={'YouTube':'ytsearch'}
+PROVIDER_CANDIDATES={
+    'YouTube':('ytsearch','YoutubeSearchIE'),
+    'Dailymotion':('dmsearch','DailymotionSearchIE'),
+    'Bilibili':('bilisearch','BiliBiliSearchIE'),
+}
+def available_providers(extractor_classes=None):
+    if extractor_classes is None:
+        try:
+            from yt_dlp.extractor import gen_extractor_classes
+            extractor_classes=list(gen_extractor_classes())
+        except ImportError:
+            extractor_classes=[]
+    names={c.__name__ for c in extractor_classes}
+    return {name:prefix for name,(prefix,cls) in PROVIDER_CANDIDATES.items() if cls in names}
+PROVIDERS=available_providers()
+
 SORTS=('relevance','newest','oldest','most_viewed','longest','shortest','highest_quality')
 MAX_CHECKS=20
 COOLDOWN_SECONDS=3600
@@ -64,6 +79,18 @@ def classify_error(exc):
     if '403' in msg:return 'ACCESS_DENIED'
     if 'timed out' in msg or 'timeout' in msg:return 'TIMEOUT'
     return 'OTHER'
+PROVIDER_HOSTS={
+ 'YouTube':('youtube.com','www.youtube.com','m.youtube.com','youtu.be'),
+ 'Dailymotion':('dailymotion.com','www.dailymotion.com','dai.ly'),
+ 'Bilibili':('bilibili.com','www.bilibili.com','m.bilibili.com','b23.tv'),
+}
+def allowed_result_url(url,provider):
+    if not isinstance(url,str) or not url.startswith('https://'):return False
+    try:
+        parsed=urlparse(url)
+        return parsed.hostname in PROVIDER_HOSTS.get(provider,()) and not parsed.username and not parsed.password
+    except ValueError:return False
+
 def extract_search(query,provider,count,offset):
     import yt_dlp
     if provider not in PROVIDERS:raise ValueError('Unsupported provider')
@@ -73,13 +100,13 @@ def extract_search(query,provider,count,offset):
     for e in ((info or {}).get('entries') or [])[offset:offset+count]:
         if not isinstance(e,dict):continue
         url=e.get('webpage_url') or e.get('url') or ''
-        if not isinstance(url,str) or not url.startswith('https://'):continue
+        if not allowed_result_url(url,provider):continue
         out.append({'title':e.get('title') or 'Untitled','url':url,'duration':e.get('duration'),'thumbnail':e.get('thumbnail'),'timestamp':e.get('timestamp'),'view_count':e.get('view_count'),'quality':None})
     return out
-def verify_quality(url):
+def verify_quality(url,provider=None):
     import yt_dlp
     if not isinstance(url,str) or not url.startswith('https://'):raise ValueError('Invalid URL')
-    if (urlparse(url).hostname or '').lower() not in ('youtube.com','www.youtube.com','m.youtube.com','youtu.be'):raise ValueError('Unsupported quality domain')
+    if not any(allowed_result_url(url,name) for name in (PROVIDER_HOSTS if provider is None else (provider,))):raise ValueError('Unsupported quality domain')
     with yt_dlp.YoutubeDL({'quiet':True,'no_warnings':True,'skip_download':True,'noplaylist':True,'socket_timeout':12,'retries':0}) as y:
         info=y.extract_info(url,download=False)
     formats=(info or {}).get('formats') or []

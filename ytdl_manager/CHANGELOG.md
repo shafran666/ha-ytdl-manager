@@ -33,3 +33,5 @@
 - Development only: not a stable release.
 - Expanded sorting, rate-limit cooldown and quality-check controls in DEV.
 - Improved quality caching, ten confirmed results within twenty checks, stale-search handling and rate-limit stops in DEV.
+- DEV: dynamically detected yt-dlp video search providers, including Dailymotion and Bilibili when their extractors are installed.
+- DEV: source-specific URL validation and provider-aware quality checks.

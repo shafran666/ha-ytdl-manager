@@ -552,12 +552,14 @@ _original_search_post=Handler.do_POST
 _search_state=_search_engine.SearchState()
 def _search_do_POST(self):
     path=_search_urlsplit(self.path).path
-    if path not in ('/search','/search/quality'):return _original_search_post(self)
+    if path not in ('/search','/search/quality','/search/providers'):return _original_search_post(self)
     try:
         length=int(self.headers.get('Content-Length','0'))
         if not 0<length<=8192:raise ValueError('Invalid request size')
         data=_search_json.loads(self.rfile.read(length))
-        if path=='/search':
+        if path=='/search/providers':
+            payload={'providers':list(_search_engine.PROVIDERS)}
+        elif path=='/search':
             query,providers,minimum,minutes,count,offset,sort=_search_engine.validate_options(data)
             groups={};warnings=[]
             for provider in providers:
@@ -570,7 +572,7 @@ def _search_do_POST(self):
             payload={'results':items,'next_offset':offset+count,'providers':list(_search_engine.PROVIDERS),'warnings':warnings,'min_quality':minimum}
         else:
             if not _search_state.allowed('YouTube'):raise ValueError('Quality checks paused after rate limit')
-            try:payload=_search_engine.verify_quality(data.get('url'))
+            try:payload=_search_engine.verify_quality(data.get('url'),data.get('provider'))
             except Exception as exc:
                 if _search_engine.classify_error(exc)=='RATE_LIMIT':_search_state.block('YouTube')
                 raise

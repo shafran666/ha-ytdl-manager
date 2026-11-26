@@ -1,7 +1,7 @@
 name: "YTDL Manager"
 version: "1.1.0-dev"
 slug: "ytdl_manager"
-description: "Concert video downloader with queue, chapters and scheduler"
+description: "Video download manager for Home Assistant OS, powered by yt-dlp"
 arch:
   - amd64
 startup: application

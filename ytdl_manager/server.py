@@ -558,7 +558,7 @@ def _search_do_POST(self):
         if not 0<length<=8192:raise ValueError('Invalid request size')
         data=_search_json.loads(self.rfile.read(length))
         if path=='/search/providers':
-            payload={'providers':list(_search_engine.PROVIDERS)}
+            payload={'providers':['YouTube']}
         elif path=='/search':
             query,providers,minimum,minutes,count,offset,sort=_search_engine.validate_options(data)
             groups={};warnings=[]

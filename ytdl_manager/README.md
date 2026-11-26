@@ -1,6 +1,6 @@
 # YTDL Manager
 
-Video download manager for Home Assistant OS, powered by yt-dlp. Version 1.0.1.
+Video download manager for Home Assistant OS, powered by yt-dlp. 
 
 Features include single-video downloads from supported sites, selectable quality and codecs, subtitles, editable MKV chapters, thumbnails, scheduling in the Home Assistant timezone, sequential queue and Download Manager.
 

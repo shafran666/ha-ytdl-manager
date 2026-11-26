@@ -37,3 +37,6 @@
 - DEV: source-specific URL validation and provider-aware quality checks.
 - DEV: source-specific yt-dlp adapters for YouTube, Bilibili, Niconico, Google Video, Yahoo Video and Dailymotion URL search.
 - DEV: search URL allowlisting, provider capability detection and source-aware pagination.
+- DEV: YouTube-only title search; removed all non-YouTube search adapters and Websites selection.
+- DEV: Search videos collapsed by default using an accessible disclosure arrow.
+- DEV: Version-independent app description and updated documentation.

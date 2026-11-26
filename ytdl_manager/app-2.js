@@ -4,3 +4,21 @@ function addResult(x,minimum){const row=document.createElement('div');row.style.
 async function verify(row,x,minimum,gen){if(blocked)return false;try{const v=cache.has(x.url)?cache.get(x.url):await post('search/quality',{url:x.url,provider:'YouTube'});if(gen!==generation)return false;cache.set(x.url,v);row.dataset.quality=String(v.height||0);row.querySelector('.ys-meta').textContent=`YouTube · ${v.height?v.height+'p':'Unknown'} · ${x.duration?Math.round(x.duration/60)+' min':'Duration unknown'}`;row.hidden=Boolean(minimum&&(!v.height||v.height<minimum));return !row.hidden;}catch(e){if(gen!==generation)return false;row.querySelector('.ys-meta').textContent='Quality unavailable: '+e.message;if(/429|rate limit|bot/i.test(e.message))blocked=true;return false;}}
 async function run(more){const gen=more?generation:++generation;if(!more){offset=0;blocked=false;results.replaceChildren();}status.textContent='Searching...';try{const minimum=Number(q('ys-quality').value);const j=await post('search',{query:q('ys-query').value,websites:['YouTube'],min_duration:Number(q('ys-duration').value),min_quality:minimum,sort:q('ys-sort').value,offset,count:20});if(gen!==generation)return;offset=j.next_offset;let checked=0,matched=0;for(const x of j.results){const row=addResult(x,minimum);if(checked<(minimum?20:10)&&matched<10&&!blocked){checked++;if(await verify(row,x,minimum,gen))matched++;}}if(q('ys-sort').value==='highest_quality'){const rows=[...results.children];rows.sort((a,b)=>Number(b.dataset.quality||0)-Number(a.dataset.quality||0));rows.forEach(r=>results.append(r));}status.textContent=`YouTube: loaded ${j.results.length}; quality checked ${checked}; confirmed ${matched}.${blocked?' Rate limit: quality checks paused.':''}`;}catch(e){if(gen===generation)status.textContent=e.message;}}
 q('ys-search').addEventListener('click',()=>run(false));q('ys-more').addEventListener('click',()=>run(true));})();
+
+
+/* YTDL_SELECT_COLLAPSE_V2 */
+(function(){
+  const panel=document.getElementById('ytdl-search-panel');
+  const results=document.getElementById('ys-results');
+  const input=document.getElementById('url');
+  if(!panel||!results||!input) return;
+  results.addEventListener('click',function(event){
+    const button=event.target.closest && event.target.closest('button');
+    if(!button||!results.contains(button)||!/^select video$/i.test(button.textContent.trim())||button.disabled) return;
+    const previous=input.value;
+    // Existing selection handler executes after this capture-phase listener.
+    setTimeout(function(){
+      if(input.value && input.value!==previous) panel.open=false;
+    },0);
+  },true);
+})();

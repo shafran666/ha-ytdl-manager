@@ -88,16 +88,25 @@ def verify_quality(url):
 
 def auto_verify(rows,minimum,verify,limit=10,state=None,provider='YouTube'):
     state=state or SearchState()
-    accepted=[];checked=0;errors=[]
+    accepted=[];checked=0;errors=[];skipped=0
     for row in rows:
         if checked>=MAX_CHECKS or (minimum==0 and checked>=limit) or (minimum>0 and len(accepted)>=limit):break
         if not state.allowed(provider):errors.append('RATE_LIMIT');break
-        checked+=1
-        try:
-            result=verify(row['url']);height=result.get('height')
-            updated=dict(row,quality=height,codecs=result.get('codecs',[]))
-            if minimum==0 or allowed_quality(height,minimum):accepted.append(updated)
-        except Exception as exc:
-            kind=classify_error(exc);errors.append(kind)
-            if kind=='RATE_LIMIT':state.block(provider);break
-    return {'accepted':accepted,'checked':checked,'errors':errors,'remaining':max(0,len(rows)-checked)}
+        url=row.get('url')
+        if not isinstance(url,str) or not url.startswith('https://'):
+            skipped+=1;continue
+        if url in state.quality_cache:
+            result=state.quality_cache[url]
+        else:
+            checked+=1
+            try:
+                result=verify(url)
+                state.quality_cache[url]=result
+            except Exception as exc:
+                kind=classify_error(exc);errors.append(kind)
+                if kind=='RATE_LIMIT':state.block(provider);break
+                continue
+        height=result.get('height')
+        updated=dict(row,quality=height,codecs=result.get('codecs',[]))
+        if minimum==0 or allowed_quality(height,minimum):accepted.append(updated)
+    return {'accepted':accepted,'checked':checked,'errors':errors,'skipped':skipped,'remaining':max(0,len(rows)-checked-skipped)}

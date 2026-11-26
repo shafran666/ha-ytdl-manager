@@ -32,3 +32,4 @@
 - Multi-provider architecture, with unsupported providers hidden until validated.
 - Development only: not a stable release.
 - Expanded sorting, rate-limit cooldown and quality-check controls in DEV.
+- Improved quality caching, ten confirmed results within twenty checks, stale-search handling and rate-limit stops in DEV.

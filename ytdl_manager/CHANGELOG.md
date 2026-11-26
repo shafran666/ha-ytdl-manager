@@ -35,3 +35,5 @@
 - Improved quality caching, ten confirmed results within twenty checks, stale-search handling and rate-limit stops in DEV.
 - DEV: dynamically detected yt-dlp video search providers, including Dailymotion and Bilibili when their extractors are installed.
 - DEV: source-specific URL validation and provider-aware quality checks.
+- DEV: source-specific yt-dlp adapters for YouTube, Bilibili, Niconico, Google Video, Yahoo Video and Dailymotion URL search.
+- DEV: search URL allowlisting, provider capability detection and source-aware pagination.

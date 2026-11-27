@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote
 import yt_dlp
 
-VERSION='1.0.3'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
+VERSION='1.0.4-dev'; ROOT=Path('/data'); ROOT.mkdir(exist_ok=True)
 OPTIONS=json.loads((ROOT/'options.json').read_text()) if (ROOT/'options.json').exists() else {}
 DEFAULT=Path(OPTIONS.get('download_directory','/media/downloads'))
 DB=ROOT/'jobs.json'; PREF=ROOT/'preferences.json'; UI=Path('/app/index.html'); TZ=ZoneInfo(os.environ.get('TZ','UTC'))
@@ -25,21 +25,28 @@ try:
     save()
 except Exception as exc: print('History load error:',exc,flush=True); JOBS=[]
 def valid_url(url):
-    # Supported yt-dlp single-video sites, excluding generic URLs and private hosts.
-    from urllib.parse import urlsplit
-    import ipaddress
+    """Accept only HTTPS links to known YouTube video URL hosts."""
     try:
-        if not isinstance(url,str) or len(url)>2048: return False
-        p=urlsplit(url)
-        if p.scheme!='https' or not p.hostname or p.username or p.password: return False
-        host=p.hostname.lower().rstrip('.')
-        if host=='localhost' or host.endswith(('.local','.localhost','.internal')): return False
-        try: return ipaddress.ip_address(host).is_global
-        except ValueError: pass
-        if '.' not in host: return False
-        from yt_dlp.extractor import gen_extractor_classes
-        return any(cls.IE_NAME!='generic' and cls.suitable(url) for cls in gen_extractor_classes())
-    except (TypeError,ValueError): return False
+        if not isinstance(url, str) or len(url) > 2048:
+            return False
+        parsed = urlsplit(url)
+        if parsed.scheme != 'https' or parsed.username or parsed.password:
+            return False
+        if parsed.port not in (None, 443):
+            return False
+        host = (parsed.hostname or '').lower().rstrip('.')
+        if host not in {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be', 'www.youtu.be', 'youtube-nocookie.com', 'www.youtube-nocookie.com'}:
+            return False
+        path = parsed.path or ''
+        if host.endswith('youtu.be'):
+            return bool(path.strip('/'))
+        if path in ('/watch', '/live'):
+            return path == '/watch' and bool(__import__('urllib.parse', fromlist=['parse_qs']).parse_qs(parsed.query).get('v'))
+        if path.startswith(('/shorts/', '/live/', '/embed/')):
+            return bool(path.split('/')[2])
+        return False
+    except (TypeError, ValueError):
+        return False
 
 def close_brackets(text):
     stack=[]; pairs={'(':')','[':']','{':'}'}
@@ -141,6 +148,40 @@ def ffmetadata(job):
         title=c['title'].replace('\\','\\\\').replace('=','\\=').replace(';','\\;').replace('#','\\#').replace('\n',' ')
         lines+=['[CHAPTER]','TIMEBASE=1/1000',f'START={c["start"]*1000}',f'END={end*1000}',f'title={title}']
     p.write_text('\n'.join(lines)+'\n'); return p
+# YTDL_104_RELIABILITY_HELPERS
+
+def ytdl104_transient_error(message):
+    """Retry network/server failures; do not retry permanent format or auth errors."""
+    value=str(message or '').lower()
+    permanent=('requested format is not available', 'unsupported url',
+               'video unavailable', 'private video', 'sign in to confirm your age',
+               'no space left on device', 'insufficient disk space',
+               'invalid url', 'http error 401', 'http error 403',
+               'http error 404')
+    transient=('timed out', 'timeout', 'connection reset', 'connection aborted',
+               'temporary failure', 'http error 429', 'http error 500',
+               'http error 502', 'http error 503', 'http error 504',
+               'signature', 'challenge', 'network is unreachable')
+    return not any(x in value for x in permanent) and any(x in value for x in transient)
+
+def ytdl104_validate_mkv(path):
+    """Verify the final Matroska container has both video and audio."""
+    import subprocess,json
+    from pathlib import Path
+    file=Path(path)
+    if not file.is_file() or file.stat().st_size==0:
+        raise RuntimeError('Final MKV missing or empty')
+    run=subprocess.run(['ffprobe','-v','error','-show_entries',
+                        'format=format_name:stream=codec_type',
+                        '-of','json',str(file)],capture_output=True,text=True,timeout=45)
+    if run.returncode:
+        raise RuntimeError('FFprobe validation failed: '+run.stderr[-250:])
+    data=json.loads(run.stdout)
+    streams={x.get('codec_type') for x in data.get('streams',[])}
+    if 'matroska' not in data.get('format',{}).get('format_name','') or not {'video','audio'} <= streams:
+        raise RuntimeError('Output is not a valid MKV containing video and audio')
+    return True
+
 def friendly_download_error(text):
     msg=str(text or '')
     low=msg.lower()
@@ -266,7 +307,7 @@ def worker(job):
         out=str(folder/job['save_as']/(job['save_as']+'.%(ext)s'))
         selected_format=video_format(job)
         with LOCK: job['format_ids']=selected_format; job['message']='Downloading video'; job['total_mb']=estimate_job_size(job,job.pop('_format_info',{})); job['downloaded_mb']=0.0; save()
-        cmd=['python3','-m','yt_dlp','--newline','--continue','--no-playlist','--js-runtimes','deno','--no-write-thumbnail','--merge-output-format','mkv','-f',selected_format,'-o',out,'--print','after_move:filepath:%(filepath)s','--progress-template','download:YTDL_PROGRESS:%(progress.downloaded_bytes)s:%(progress.total_bytes)s:%(progress.total_bytes_estimate)s:%(progress.speed)s:%(progress.eta)s']
+        cmd=['python3','-m','yt_dlp','--newline','--continue','--no-playlist','--js-runtimes','deno','--no-write-thumbnail','--merge-output-format','mkv','--remux-video','mkv','-f',selected_format,'-o',out,'--print','after_move:filepath:%(filepath)s','--progress-template','download:YTDL_PROGRESS:%(progress.downloaded_bytes)s:%(progress.total_bytes)s:%(progress.total_bytes_estimate)s:%(progress.speed)s:%(progress.eta)s']
         if job['subtitle']!='None': cmd+=['--write-subs','--write-auto-subs','--sub-langs',job['subtitle'],'--embed-subs']
         # Prevent original chapters from being embedded if user explicitly ignored them.
         if job['chapters']: cmd+=['--embed-chapters']
@@ -345,6 +386,9 @@ def worker(job):
             if run.returncode==0 and tmp.is_file(): os.replace(tmp,original); chapter_embedded=True
             else: tmp.unlink(missing_ok=True)
             meta.unlink(missing_ok=True)
+        # YTDL_104_FINAL_MKV_GATE
+        if not final or not ytdl104_validate_mkv(final):
+            raise RuntimeError('Final MKV validation failed')
         with LOCK:
             if final and Path(final).is_file():
                 final_bytes=Path(final).stat().st_size
@@ -359,7 +403,7 @@ def worker(job):
             cancelled=job.get('state')=='cancelling' or str(exc)=='Cancelled by user'
             retry_count=job.get('retries',0)
             if cancelled: job.update(state='cancelled',message='Cancelled',next_retry=None)
-            elif retry_count<3: job.update(state='retry_wait',message=str(exc)[:200],next_retry=(datetime.now(timezone.utc)+timedelta(minutes=5)).isoformat(),retries=retry_count+1)
+            elif retry_count<3 and ytdl104_transient_error(str(exc)): job.update(state='retry_wait',message=str(exc)[:200],next_retry=(datetime.now(timezone.utc)+timedelta(minutes=5)).isoformat(),retries=retry_count+1)
             else: job.update(state='interrupted',message=str(exc)[:200],next_retry=None)
             job.update(updated=now(),finished=now()); save()
     finally:

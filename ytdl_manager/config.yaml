@@ -1,6 +1,6 @@
 name: "YTDL Manager"
-version: "1.0.3"
-slug: "ytdl_manager"
+version: "1.0.4-dev"
+slug: "ytdl_manager_dev_104"
 description: "Concert video downloader with queue, chapters and scheduler"
 arch:
   - amd64
@@ -15,6 +15,6 @@ map:
   - type: media
     read_only: false
 options:
-  download_directory: "/media/downloads"
+  download_directory: "/media/ytdl-dev-104"
 schema:
   download_directory: str

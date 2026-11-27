@@ -25,3 +25,15 @@
 
 ## [1.0.0] - 2026-11-22
 - Initial public release.
+
+## 1.0.4-dev (unreleased)
+- Accept YouTube video URLs only; reject other providers.
+- Request MKV remux for single-stream and merged downloads.
+- YouTube challenge, Deno compatibility, retry, metadata and HAOS isolation still require acceptance tests.
+- Video Search remains deferred to 1.1.0.
+
+### 1.0.4 reliability validation
+- Retry only classified transient failures; preserve existing retry scheduling and partial downloads.
+- Verify final output with FFprobe: Matroska container and both audio/video streams before completion.
+- Added deterministic tests for retry classification and FFprobe validation contract.
+- Still requires actual container/HAOS E2E and manual acceptance before stable release.

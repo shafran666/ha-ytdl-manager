@@ -182,6 +182,35 @@ def ytdl104_validate_mkv(path):
         raise RuntimeError('Output is not a valid MKV containing video and audio')
     return True
 
+# YTDL_104_UI_AND_DISK_HELPERS
+
+def ytdl104_progress_snapshot(downloaded, total=None, speed=None):
+    """Return safe progress data; unknown values remain unknown."""
+    def safe(v):
+        try:
+            f=float(v)
+            return f if __import__('math').isfinite(f) and f>=0 else None
+        except (TypeError,ValueError,OverflowError):
+            return None
+    d=safe(downloaded) or 0.0
+    t=safe(total)
+    rate=safe(speed)
+    percent=round(min(100.0,100.0*d/t),1) if t and t>0 else None
+    eta=round(max(0.0,t-d)/rate) if t and rate and rate>0 else None
+    return {'percent':percent,'downloaded_mb':round(d/1048576,1),
+            'total_mb':round(t/1048576,1) if t is not None else None,
+            'speed_mbps':round(rate/1048576,2) if rate is not None else None,
+            'eta_seconds':eta}
+
+def ytdl104_has_disk_reserve(path, required_bytes=536870912):
+    """Check free space on destination filesystem, not CloudShell root."""
+    import shutil
+    from pathlib import Path
+    dest=Path(path)
+    while not dest.exists() and dest!=dest.parent:
+        dest=dest.parent
+    return shutil.disk_usage(dest).free>=required_bytes
+
 def friendly_download_error(text):
     msg=str(text or '')
     low=msg.lower()

@@ -38,3 +38,4 @@
 - Added deterministic tests for retry classification and FFprobe validation contract.
 - Still requires actual container/HAOS E2E and manual acceptance before stable release.
 - Fix 1.0.4 Docker build by removing the Search-only search_engine.py COPY instruction.
+- Add guarded progress/ETA and destination disk-reserve helpers with adaptive boundary tests; runtime wiring and UI acceptance still pending.

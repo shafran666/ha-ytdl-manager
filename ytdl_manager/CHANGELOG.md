@@ -37,3 +37,4 @@
 - Verify final output with FFprobe: Matroska container and both audio/video streams before completion.
 - Added deterministic tests for retry classification and FFprobe validation contract.
 - Still requires actual container/HAOS E2E and manual acceptance before stable release.
+- Fix 1.0.4 Docker build by removing the Search-only search_engine.py COPY instruction.

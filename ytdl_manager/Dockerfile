@@ -6,7 +6,6 @@ ENV PATH="/opt/ytdl-venv/bin:/usr/bin:/bin"
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY server.py /app/server.py
-COPY search_engine.py /app/search_engine.py
 COPY index.html /app/index.html
 COPY run.sh /run.sh
 RUN chmod 755 /run.sh

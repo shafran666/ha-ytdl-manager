@@ -311,6 +311,46 @@ def estimate_job_size(job,info):
         values.append(float(size))
     return round(sum(values)/1000000,1) if values else None
 
+# YTDL104_SIDECAR_EMBED_GUARD
+YTDL104_SUB_EXTS={'.vtt','.srt','.ass','.ssa','.ttml','.srv1','.srv2','.srv3','.json3'}
+
+def ytdl104_sidecar_snapshot(directory, stem):
+    """Snapshot only subtitle sidecars matching this job output stem."""
+    base=Path(directory)
+    if not base.is_dir():return set()
+    return {str(p.resolve()) for p in base.iterdir()
+            if p.is_file() and not p.is_symlink()
+            and p.name.startswith(stem+'.') and p.suffix.lower() in YTDL104_SUB_EXTS}
+
+def ytdl104_cleanup_embedded_sidecars(mkv, before):
+    """Remove only NEW subtitle sidecars after FFprobe confirms embedded subtitles."""
+    import json,subprocess
+    output=Path(mkv)
+    if not output.is_file() or output.suffix.lower()!='.mkv':return []
+    probe=subprocess.run(['ffprobe','-v','error','-select_streams','s',
+        '-show_entries','stream=index,codec_name:stream_tags=language','-of','json',str(output)],
+        capture_output=True,text=True,timeout=45)
+    if probe.returncode:return []
+    tracks=json.loads(probe.stdout).get('streams',[])
+    if not tracks:return []
+    langs={(t.get('tags') or {}).get('language','').lower() for t in tracks}
+    aliases={'en':'eng','eng':'en','es':'spa','spa':'es','fr':'fra','fra':'fr','de':'deu','deu':'de','pl':'pol','pol':'pl'}
+    base=output.parent.resolve()
+    removed=[]
+    for f in output.parent.iterdir():
+        if not f.is_file() or f.is_symlink() or f.suffix.lower() not in YTDL104_SUB_EXTS:continue
+        if not f.name.startswith(output.stem+'.'):continue
+        if str(f.resolve()) in before:continue
+        if f.parent.resolve()!=base:continue
+        # Match the subtitle language to an actual embedded track.
+        suffix=f.name[len(output.stem)+1:-len(f.suffix)].lower().split('-')[0].split('_')[0]
+        if not suffix or (suffix not in langs and aliases.get(suffix) not in langs):continue
+        # A track must exist in MKV; do not infer success from yt-dlp console output.
+        # Delete only files produced in this run. Historical files remain untouched.
+        f.unlink()
+        removed.append(f.name)
+    return removed
+
 def is_subtitle_error(message):
     text=str(message).lower()
     return ('subtitle' in text or 'caption' in text) and any(x in text for x in (
@@ -350,6 +390,7 @@ def worker(job):
         out=str(folder/job['save_as']/(job['save_as']+'.%(ext)s'))
         selected_format=video_format(job)
         with LOCK: job['format_ids']=selected_format; job['message']='Downloading video'; job['total_mb']=estimate_job_size(job,job.pop('_format_info',{})); job['downloaded_mb']=0.0; save()
+        sidecars_before=ytdl104_sidecar_snapshot(Path(out).parent, job['save_as'])
         cmd=['python3','-m','yt_dlp','--newline','--continue','--no-playlist','--js-runtimes','deno','--no-write-thumbnail','--merge-output-format','mkv','--remux-video','mkv','-f',selected_format,'-o',out,'--print','after_move:filepath:%(filepath)s','--progress-template','download:YTDL_PROGRESS:%(progress.downloaded_bytes)s:%(progress.total_bytes)s:%(progress.total_bytes_estimate)s:%(progress.speed)s:%(progress.eta)s']
         if job['subtitle']!='None': cmd+=['--write-subs','--sub-langs',job['subtitle'],'--embed-subs']
         # Prevent original chapters from being embedded if user explicitly ignored them.
@@ -444,6 +485,7 @@ def worker(job):
         # YTDL_104_FINAL_MKV_GATE
         if not final or not ytdl104_validate_mkv(final):
             raise RuntimeError('Final MKV validation failed')
+        removed_sidecars=ytdl104_cleanup_embedded_sidecars(final,sidecars_before) if final else []
         with LOCK:
             if final and Path(final).is_file():
                 final_bytes=Path(final).stat().st_size
@@ -452,6 +494,7 @@ def worker(job):
                 job['downloaded_mb']=final_mb
                 job['total_mb']=final_mb
                 job['message']='Completed'
+            job['removed_subtitle_sidecars']=removed_sidecars
             job.update(state='completed',progress=100,message='Completed' if not job['chapters'] or chapter_embedded else 'Completed; chapters could not be embedded',finished=now(),updated=now(),subtitles_embedded=(subtitles_seen and not job.get('subtitle_failed')),chapters_embedded=chapter_embedded,next_retry=None); save()
     except Exception as exc:
         with LOCK:

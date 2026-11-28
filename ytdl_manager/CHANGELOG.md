@@ -41,3 +41,4 @@
 - Add guarded progress/ETA and destination disk-reserve helpers with adaptive boundary tests; runtime wiring and UI acceptance still pending.
 - 1.0.4-dev: safer folder creation, existing-file status, actual MKV subtitle track reporting and clearer queue controls.
 - 1.0.4-dev: safe folder creation, duplicate status, actual subtitle tracks, Pause/Delete from queue and Schedule time labels.
+- 1.0.4-dev: remove newly created external subtitle sidecars only after FFprobe confirms embedded subtitles; preserve historical sidecars and failed-download files.

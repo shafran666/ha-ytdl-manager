@@ -106,7 +106,7 @@ def analyze_info(info):
     if video and not same: sources.append({'id':'video','label':f'Video ({len(video)})','source':'video','chapters':video})
     if description: sources.append({'id':'description','label':f'Description ({len(description)})','source':'description','chapters':description})
     # YTDL104_SUBTITLE_OPTIONS_VERIFIED
-    subs=sorted(set((info.get('subtitles') or {}).keys())|set((info.get('automatic_captions') or {}).keys()))
+    subs=sorted((info.get('subtitles') or {}).keys())
     ordered=[x for x in ('H.265','H.264','VP9','AV1','VP8') if x in codecs]+sorted(codecs-{'H.265','H.264','VP9','AV1','VP8'})
     return {'thumbnail':info.get('thumbnail') or '', 'title':info.get('title') or 'Untitled','duration':duration,'video':sorted(videos),'audio':sorted(audios),'codecs':ordered,'codec_heights':{k:sorted(v) for k,v in combos.items()},'subtitles':subs,'sources':sources,'id':info.get('id')}
 def check_chapters(items,duration):
@@ -320,7 +320,7 @@ def without_subtitles(command):
     # Only remove flags added for subtitle downloading/embedding.
     result=[]; i=0
     while i<len(command):
-        if command[i] in ('--write-subs','--write-auto-subs','--embed-subs'):
+        if command[i] in ('--write-subs','--embed-subs'):
             i+=1; continue
         if command[i]=='--sub-langs':
             i+=2; continue
@@ -351,7 +351,7 @@ def worker(job):
         selected_format=video_format(job)
         with LOCK: job['format_ids']=selected_format; job['message']='Downloading video'; job['total_mb']=estimate_job_size(job,job.pop('_format_info',{})); job['downloaded_mb']=0.0; save()
         cmd=['python3','-m','yt_dlp','--newline','--continue','--no-playlist','--js-runtimes','deno','--no-write-thumbnail','--merge-output-format','mkv','--remux-video','mkv','-f',selected_format,'-o',out,'--print','after_move:filepath:%(filepath)s','--progress-template','download:YTDL_PROGRESS:%(progress.downloaded_bytes)s:%(progress.total_bytes)s:%(progress.total_bytes_estimate)s:%(progress.speed)s:%(progress.eta)s']
-        if job['subtitle']!='None': cmd+=['--write-subs','--write-auto-subs','--sub-langs',job['subtitle'],'--embed-subs']
+        if job['subtitle']!='None': cmd+=['--write-subs','--sub-langs',job['subtitle'],'--embed-subs']
         # Prevent original chapters from being embedded if user explicitly ignored them.
         if job['chapters']: cmd+=['--embed-chapters']
         cmd.append(job['url'])

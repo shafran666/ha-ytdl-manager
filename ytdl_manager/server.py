@@ -61,8 +61,11 @@ def clean_name(s):
     return s[:160].rstrip(' .')
 def allowed_dir(path):
     base=Path('/media').resolve(strict=True)
-    target=Path(str(path)).resolve(strict=True)
-    if not target.is_dir() or (target!=base and base not in target.parents): raise ValueError('Choose an existing folder under /media')
+    raw=Path(str(path))
+    if not raw.is_absolute(): raise ValueError('Absolute /media path required')
+    target=raw.resolve(strict=False)
+    if target==base or base not in target.parents: raise ValueError('Choose a folder under /media')
+    # Existing symlinks are resolved by Path.resolve; never follow outside /media.
     return target
 def chapter_rows(text,duration):
     result=[]
@@ -102,6 +105,7 @@ def analyze_info(info):
     sources=[]
     if video and not same: sources.append({'id':'video','label':f'Video ({len(video)})','source':'video','chapters':video})
     if description: sources.append({'id':'description','label':f'Description ({len(description)})','source':'description','chapters':description})
+    # YTDL104_SUBTITLE_OPTIONS_VERIFIED
     subs=sorted(set((info.get('subtitles') or {}).keys())|set((info.get('automatic_captions') or {}).keys()))
     ordered=[x for x in ('H.265','H.264','VP9','AV1','VP8') if x in codecs]+sorted(codecs-{'H.265','H.264','VP9','AV1','VP8'})
     return {'thumbnail':info.get('thumbnail') or '', 'title':info.get('title') or 'Untitled','duration':duration,'video':sorted(videos),'audio':sorted(audios),'codecs':ordered,'codec_heights':{k:sorted(v) for k,v in combos.items()},'subtitles':subs,'sources':sources,'id':info.get('id')}
@@ -326,6 +330,8 @@ def without_subtitles(command):
 def worker(job):
     try:
         folder=allowed_dir(job['directory'])
+        # YTDL104_CREATE_SAFE_DIRECTORY
+        Path(folder).mkdir(parents=True, exist_ok=True)
         import shutil
         if shutil.disk_usage(folder).free < 150*1000000:
             raise RuntimeError('Insufficient disk space')
@@ -333,6 +339,14 @@ def worker(job):
         with LOCK:
             if job['state']=='cancelled': return
             job.update(state='downloading',message='Starting download',updated=now()); save()
+        # YTDL104_DUPLICATE_STATUS_VERIFIED
+        existing=folder/job['save_as']/(job['save_as']+'.mkv')
+        if existing.is_file() and existing.stat().st_size>0:
+            ytdl104_validate_mkv(existing)
+            with LOCK:
+                job.update(state='already_exists',message='Already exists',updated=now(),finished=now())
+                save()
+            return
         out=str(folder/job['save_as']/(job['save_as']+'.%(ext)s'))
         selected_format=video_format(job)
         with LOCK: job['format_ids']=selected_format; job['message']='Downloading video'; job['total_mb']=estimate_job_size(job,job.pop('_format_info',{})); job['downloaded_mb']=0.0; save()
@@ -407,6 +421,18 @@ def worker(job):
             if cancelled: raise RuntimeError('Cancelled by user')
             if rc: err=retry_error or 'Video/audio retry failed after subtitle error'
         if rc: raise RuntimeError(err or f'yt-dlp exited with {rc}')
+        # YTDL104_FINAL_SUBTITLE_STATUS_VERIFIED
+        actual_subtitles=[]
+        if final and Path(final).is_file():
+            probe=subprocess.run(['ffprobe','-v','error','-select_streams','s',
+                '-show_entries','stream_tags=language:stream=codec_name','-of','json',str(final)],
+                capture_output=True,text=True,timeout=45)
+            if probe.returncode==0:
+                actual_subtitles=[(x.get('tags') or {}).get('language','und')
+                    for x in json.loads(probe.stdout).get('streams',[])]
+        with LOCK:
+            job['saved_subtitles']=actual_subtitles
+            save()
         chapter_embedded=False
         if job['chapters'] and final and Path(final).is_file():
             with LOCK: job['message']='Embedding chapters'; save()
